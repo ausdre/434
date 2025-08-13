@@ -13,27 +13,15 @@
 <div class="mouse-wrap">
   <div class="mouse">
     <div class="frame">
-      <svg version="1.1" id="mouse" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px"
-           viewBox="0 0 54.9 91" style="enable-background:new 0 0 54.9 91;" xml:space="preserve">
+      <!-- (dein Maus-Indicator unverändert) -->
+      <svg version="1.1" id="mouse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54.9 91">
         <path id="XMLID_173_" class="st0" linejoin="round" stroke-linecap="round" stroke-miterlimit="10"
               d="M27.4,3.6L27.4,3.6C14.2,3.6,3.5,14.3,3.5,27.5v36c0,13.2,10.7,23.9,23.9,23.9h0
 	c13.2,0,23.9-10.7,23.9-23.9v-36C51.4,14.3,40.7,3.6,27.4,3.6z"></path>
       </svg>
     </div>
-    <div class="mouse-left">
-      <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px"
-           viewBox="0 0 27.4 91" style="enable-background:new 0 0 27.4 91;" xml:space="preserve">
-        <path linejoin="round" stroke-linecap="round" stroke-miterlimit="10" class="Draw-Frame Animate-Draw"
-              d="M27.4,87.5L27.4,87.5c-13.2,0-23.9-10.7-23.9-23.9v-36c0-13.2,10.7-23.9,23.9-23.9h0"></path>
-      </svg>
-    </div>
-    <div class="mouse-right">
-      <svg version="1.1" id="Layer_2" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px"
-           viewBox="0 0 27.4 91" style="enable-background:new 0 0 27.4 91;" xml:space="preserve">
-        <path linejoin="round" stroke-linecap="round" stroke-miterlimit="10" class="Draw-Frame Animate-Draw"
-              d="M0,3.6L0,3.6c13.2,0,23.9,10.7,23.9,23.9v36c0,13.2-10.7,23.9-23.9,23.9h0"></path>
-      </svg>
-    </div>
+    <div class="mouse-left"><svg viewBox="0 0 27.4 91"><path class="Draw-Frame Animate-Draw" d="M27.4,87.5L27.4,87.5c-13.2,0-23.9-10.7-23.9-23.9v-36c0-13.2,10.7-23.9,23.9-23.9h0"></path></svg></div>
+    <div class="mouse-right"><svg viewBox="0 0 27.4 91"><path class="Draw-Frame Animate-Draw" d="M0,3.6L0,3.6c13.2,0,23.9,10.7,23.9,23.9v36c0,13.2-10.7,23.9-23.9,23.9h0"></path></svg></div>
   </div>
   <p class="mousetext">˅</p>
 </div>
@@ -55,15 +43,17 @@
   renderer.setClearColor(0x16212b, 1);
   document.body.appendChild(renderer.domElement);
 
-  // --- GLOBAL SETTINGS (kept) + mobile-safe tweaks ---
+  // --- SETTINGS ---
   const IS_MOBILE = /Mobi|Android|iPhone|iPad|Touch/.test(navigator.userAgent);
   const PARTICLE_COUNT = IS_MOBILE ? 3200 : 4000;
-  const MORPH_DURATION = 5.3333;
-  const CHAOS_AMPL = 1.0;      // softened to keep motion traceable
+  const MORPH_DURATION = 8.0;            // langsamer = sichtbarer
+  const CHAOS_AMPL = 0.9;                // Grund-Schimmer
   const CHAOS_FREQ = 0.28;
-  const TAIL_LEN = IS_MOBILE ? 24 : 42; // integer for stable buffers
+  const SHAKE_AMPL = 7.0;                // sichtbares Shaking während Morph
+  const SHAKE_FREQ = 10.0;               // hochfrequent
+  const TAIL_LEN = IS_MOBILE ? 24 : 42;
 
-  // --- DATAVEYES-STYLE ROUND SPRITE TEXTURE ---
+  // --- Round sprite texture (Dataveyes-Style) ---
   function makeDiscTexture(size=64){
     const c=document.createElement('canvas'); c.width=c.height=size;
     const g=c.getContext('2d');
@@ -78,14 +68,14 @@
   }
   const discTex = makeDiscTexture();
 
-  // --- SUBTLE POINTER/TUCH COLOR HIGHLIGHT (not moving camera/angles) ---
-  const pointerNDC = { x: 10, y: 10 }; // off-screen init
+  // --- Subtle pointer highlight (nur Farbe) ---
+  const pointerNDC = { x: 10, y: 10 };
   let pointerPulse = 0;
   function setPointer(clientX, clientY){
     const r = renderer.domElement.getBoundingClientRect();
     pointerNDC.x = ((clientX - r.left) / r.width) * 2 - 1;
     pointerNDC.y = -((clientY - r.top) / r.height) * 2 + 1;
-    pointerPulse = 1.2; // fade over time
+    pointerPulse = 1.2;
   }
   window.addEventListener('mousemove', e => setPointer(e.clientX, e.clientY));
   window.addEventListener('touchmove', e => {
@@ -93,73 +83,85 @@
     const t = e.touches[0]; setPointer(t.clientX, t.clientY);
   }, {passive:true});
 
-  // --- SVG LOGO AND TEXT, ALL AS 3D EXTRUSION (kept) ---
+  // --- SVG Paths (deine) ---
   const logoCompoundPath = `
-M 205.421 116.22 L 236.765 134.869 L 205.429 154.02 L 174.014 134.911 L 205.421 116.22 Z M 191.729 134.818 L 205.545 143.256 L 219.294 135.026 L 205.499 127.324 L 191.729 134.818 Z M 186.66 172.193 L 186.69 191.82 L 174.001 184.061 L 174.087 164.371 L 186.66 172.193 Z
-M 173.93 143.883 L 205.448 163.421 L 236.93 144.191 L 236.887 155.459 L 205.492 174.879 L 174.21 155.459 L 173.93 143.883 Z
+M 205.421 116.22 L 236.765 134.869 L 205.429 154.02 L 174.014 134.911 L 205.421 116.22 Z
+M 191.729 134.818 L 205.545 143.256 L 219.294 135.026 L 205.499 127.324 L 191.729 134.818 Z
+M 186.66 172.193 L 186.69 191.82 L 174.001 184.061 L 174.087 164.371 L 186.66 172.193 Z
+M 173.93 143.883 L 205.448 163.421 L 236.93 144.191 L 236.887 155.459 L 205.492 174.879
+L 174.21 155.459 L 173.93 143.883 Z
 M 236.866 164.687 L 236.643 183.781 L 224.178 191.82 L 224.209 172.005 L 236.866 164.687 Z
 `;
   const textCompoundPath = `
-M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 182.856 L 179.672 119.892 L 192.267 119.892 L 161.376 194.166 L 150.425 194.166 Z M 249.117 120.733 L 280.797 194.166 L 268.723 194.166 L 239.243 132.273 L 210.244 194.166 L 197.693 194.166 L 232.436 120.733 L 249.117 120.733 Z M 295.337 122.874 L 358.541 122.874 L 358.541 130.195 L 295.337 130.195 L 295.337 122.874 Z M 295.337 184.045 L 358.541 184.045 L 358.541 191.363 L 295.337 191.363 L 295.337 184.045 Z M 295.337 154.628 L 349.826 154.628 L 349.826 160.294 L 295.337 160.294 L 295.337 154.628 Z M 380.481 158.739 C 380.655 146.635 384.38 137.162 391.643 130.325 C 395.402 126.788 403.665 121.266 417.438 120.344 C 428.734 119.589 436.448 122.877 440.504 125.551 C 446.722 129.655 449.988 132.851 453.022 138.325 C 456.273 144.198 457.547 150.602 457.444 157.894 C 457.329 165.294 455.584 171.905 452.214 177.741 C 448.84 183.574 444.118 188.007 438.026 190.989 C 431.941 193.989 425.404 195.492 418.419 195.492 C 410.842 195.492 404.098 193.841 398.183 190.515 C 392.261 187.196 387.81 182.674 384.817 176.934 C 381.836 171.201 380.381 165.131 380.481 158.739 Z M 388.658 156.676 C 388.002 173.308 399.594 187.915 418.99 187.548 C 438.17 187.185 450.018 176.278 449.985 156.187 C 449.962 142.528 439.944 127.577 419.616 127.37 C 401.124 127.181 389.354 138.939 388.658 156.676 Z M 606.355 120.559 L 641.453 194.166 L 629.391 194.166 L 599.9 132.273 L 570.964 194.166 L 558.35 194.166 L 593.378 120.559 L 606.355 120.559 Z M 492.883 161.257 L 492.916 194.166 L 480.05 194.166 L 480.242 120.414 L 516.537 120.685 C 521.496 120.722 525.748 121.029 529.233 122.688 C 532.725 124.351 535.395 126.725 537.243 129.833 C 539.095 132.929 540.017 136.651 540.021 140.973 C 540.025 146.654 538.343 151.276 534.977 154.835 C 531.607 158.394 526.729 160.468 520.344 161.061 L 545.965 194.166 L 534.236 194.166 L 512.9 161.427 L 492.883 161.257 Z M 492.883 156.039 L 516.559 156.239 C 520.092 156.265 523.003 155.739 525.329 154.654 C 527.633 153.58 529.377 152.057 530.555 150.109 C 531.736 148.172 532.329 145.961 532.321 143.473 L 532.325 138.473 C 532.325 135.988 531.736 133.766 530.558 131.799 C 529.381 129.84 527.633 128.307 525.322 127.184 C 523.007 126.07 520.085 125.496 516.555 125.473 L 492.883 125.27 L 492.883 156.039 Z
+M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 182.856 L 179.672 119.892 L 192.267 119.892 L 161.376 194.166 L 150.425 194.166 Z
+M 249.117 120.733 L 280.797 194.166 L 268.723 194.166 L 239.243 132.273 L 210.244 194.166 L 197.693 194.166 L 232.436 120.733 L 249.117 120.733 Z
+M 295.337 122.874 L 358.541 122.874 L 358.541 130.195 L 295.337 130.195 L 295.337 122.874 Z
+M 295.337 184.045 L 358.541 184.045 L 358.541 191.363 L 295.337 191.363 L 295.337 184.045 Z
+M 295.337 154.628 L 349.826 154.628 L 349.826 160.294 L 295.337 160.294 L 295.337 154.628 Z
+M 380.481 158.739 C 380.655 146.635 384.38 137.162 391.643 130.325 C 395.402 126.788 403.665 121.266 417.438 120.344 C 428.734 119.589 436.448 122.877 440.504 125.551 C 446.722 129.655 449.988 132.851 453.022 138.325 C 456.273 144.198 457.547 150.602 457.444 157.894 C 457.329 165.294 455.584 171.905 452.214 177.741 C 448.84 183.574 444.118 188.007 438.026 190.989 C 431.941 193.989 425.404 195.492 418.419 195.492 C 410.842 195.492 404.098 193.841 398.183 190.515 C 392.261 187.196 387.81 182.674 384.817 176.934 C 381.836 171.201 380.381 165.131 380.481 158.739 Z
+M 388.658 156.676 C 388.002 173.308 399.594 187.915 418.99 187.548 C 438.17 187.185 450.018 176.278 449.985 156.187 C 449.962 142.528 439.944 127.577 419.616 127.37 C 401.124 127.181 389.354 138.939 388.658 156.676 Z
+M 606.355 120.559 L 641.453 194.166 L 629.391 194.166 L 599.9 132.273 L 570.964 194.166 L 558.35 194.166 L 593.378 120.559 L 606.355 120.559 Z
+M 492.883 161.257 L 492.916 194.166 L 480.05 194.166 L 480.242 120.414 L 516.537 120.685 C 521.496 120.722 525.748 121.029 529.233 122.688 C 532.725 124.351 535.395 126.725 537.243 129.833 C 539.095 132.929 540.017 136.651 540.021 140.973 C 540.025 146.654 538.343 151.276 534.977 154.835 C 531.607 158.394 526.729 160.468 520.344 161.061 L 545.965 194.166 L 534.236 194.166 L 512.9 161.427 L 492.883 161.257 Z
+M 492.883 156.039 L 516.559 156.239 C 520.092 156.265 523.003 155.739 525.329 154.654 C 527.633 153.58 529.377 152.057 530.555 150.109 C 531.736 148.172 532.329 145.961 532.321 143.473 L 532.325 138.473 C 532.325 135.988 531.736 133.766 530.558 131.799 C 529.381 129.84 527.633 128.307 525.322 127.184 C 523.007 126.07 520.085 125.496 516.555 125.473 L 492.883 125.27 L 492.883 156.039 Z
 `;
 
-  // --- SVG sampling as 2D outline (kept) ---
-  function sampleSVGPath(pathData, n, scale=1, offsetX=0, offsetY=0) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg'),
-          p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  // --- Helpers ---
+  function sampleSVGPath(pathData, n) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    const p   = document.createElementNS('http://www.w3.org/2000/svg','path');
     p.setAttribute('d', pathData); svg.appendChild(p); document.body.appendChild(svg);
     const len = p.getTotalLength(), pts=[];
-    for(let i=0;i<n;i++){
-      const pt = p.getPointAtLength(i/(n-1)*len);
-      pts.push({x:(pt.x+offsetX)*scale,y:-(pt.y+offsetY)*scale,z:0});
-    }
+    for(let i=0;i<n;i++){ const pt = p.getPointAtLength(i/(n-1)*len); pts.push({x:pt.x, y:-pt.y, z:0}); }
     document.body.removeChild(svg);
     return pts;
   }
-
-  // --- Extrude 2D outline into true 3D slab (kept) ---
-  function extrudeShape2DTo3D(points2D, levels=20, height=210) {
-    const extruded = [];
-    for (let l = 0; l < levels; l++) {
-      let z = -height/2 + (height*l)/(levels-1);
-      for (let p of points2D) 
-        extruded.push({x: p.x, y: p.y, z: z});
+  function centerScaleToRadius(pts, desiredR){
+    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+    for (const p of pts){ if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; }
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2; const half=Math.max(maxX-minX,maxY-minY)/2 || 1;
+    const s = desiredR/half;
+    return pts.map(p=>({x:(p.x-cx)*s, y:(p.y-cy)*s, z:0}));
+  }
+  function addDepthStable(points2D, depth=60){
+    const out=new Array(points2D.length);
+    for (let i=0;i<points2D.length;i++){
+      const p=points2D[i]; const h=Math.sin(i*12.9898 + 78.233) * 43758.5453;
+      const frac=h - Math.floor(h); const z=(frac-0.5)*2*depth;
+      out[i]={x:p.x,y:p.y,z:z};
     }
-    return extruded;
+    return out;
   }
 
-  // --- Build morph targets (logo/text=volumetric block) (kept) ---
-  const logo2D = sampleSVGPath(logoCompoundPath, PARTICLE_COUNT, 2, -250, -250);
-  const logoPts = extrudeShape2DTo3D(logo2D, 50, 50).slice(0,PARTICLE_COUNT);
+  // --- Targets with precomputed depth (Text größer) ---
+  const logo2D_raw = sampleSVGPath(logoCompoundPath, PARTICLE_COUNT);
+  const text2D_raw = sampleSVGPath(textCompoundPath, PARTICLE_COUNT);
+  const logo2D = centerScaleToRadius(logo2D_raw, 210);
+  const text2D = centerScaleToRadius(text2D_raw, 290);  // << Text größer
 
-  const text2D = sampleSVGPath(textCompoundPath, PARTICLE_COUNT, 0.33, -100, -50);
-  const textPts = extrudeShape2DTo3D(text2D, 30, 30).slice(0,PARTICLE_COUNT);
+  const logoPts = addDepthStable(logo2D, 70);
+  const textPts = addDepthStable(text2D, 60);
 
-  const cloudPts = Array.from({length:PARTICLE_COUNT}, _=>({
-    x:(Math.random()*1.66)*420,
-    y:(Math.random()*1.33)*420,
-    z:(Math.random()*1.85)*400
-  }));
+  const cloudPts = Array.from({length:PARTICLE_COUNT}, (_,i)=>{
+    const r = 320 + ((Math.sin(i*7.13+1.7)*0.5+0.5)*220);
+    const a = (i*0.987)%(Math.PI*2), b = (i*1.113)%Math.PI;
+    return { x:r*Math.sin(b)*Math.cos(a), y:r*Math.cos(b)*0.75, z:r*Math.sin(b)*Math.sin(a) };
+  });
 
-  // --- Per-particle chaos for morph (kept) ---
-  const chaosPhase = Array(PARTICLE_COUNT).fill(0).map(()=>Math.random() * Math.PI * 2);
-  const chaosAngle = Array(PARTICLE_COUNT).fill(0).map(()=>Math.random() * Math.PI * 2);
-  const chaosAxis = Array(PARTICLE_COUNT).fill(0).map((_, i) => ([
-    Math.cos(chaosAngle[i]*1.25),
-    Math.cos(chaosAngle[i]*1.75),
-    Math.cos(chaosAngle[i]*1.55)
-  ]));
+  // --- Chaos / Shake params ---
+  const chaosPhase = Array(PARTICLE_COUNT).fill(0).map(()=>Math.random()*Math.PI*2);
+  const chaosAxis  = Array(PARTICLE_COUNT).fill(0).map(()=>{
+    const a=Math.random()*Math.PI*2; return [Math.cos(a), Math.sin(a*1.3), Math.cos(a*0.7)];
+  });
 
-  // --- Trails container (fixed to COUNT, integer length) ---
+  // --- Trails ---
   const TAILS = Array(PARTICLE_COUNT).fill(null).map(()=>[]);
 
-  // --- THREE.js Buffer setup (fixed loop bounds) ---
-  const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(PARTICLE_COUNT * 3);
-  const colors    = new Float32Array(PARTICLE_COUNT * 3);
-  const baseColors= new Float32Array(PARTICLE_COUNT * 3); // palette base
+  // --- Buffers & palette ---
+  const geometry   = new THREE.BufferGeometry();
+  const positions  = new Float32Array(PARTICLE_COUNT * 3);
+  const colors     = new Float32Array(PARTICLE_COUNT * 3);
+  const baseColors = new Float32Array(PARTICLE_COUNT * 3);
 
-  // palette (dataveyes-like)
   const PALETTE = ['#ffb25a','#ff6aa6','#5ad1ff','#9cff8c','#c9d6ff'].map(c=>new THREE.Color(c));
   function pickBaseColor(){
     const c = PALETTE[(Math.random()*PALETTE.length)|0].clone();
@@ -174,7 +176,7 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
     positions[i*3+1]=cloudPts[i].y;
     positions[i*3+2]=cloudPts[i].z;
 
-    const bc = pickBaseColor();
+    const bc=pickBaseColor();
     baseColors[i*3]=bc.r; baseColors[i*3+1]=bc.g; baseColors[i*3+2]=bc.b;
     colors[i*3]=bc.r; colors[i*3+1]=bc.g; colors[i*3+2]=bc.b;
 
@@ -184,7 +186,6 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
   geometry.setAttribute('position', new THREE.BufferAttribute(positions,3));
   geometry.setAttribute('color',    new THREE.BufferAttribute(colors,3));
 
-  // DATAVEYES-style PointsMaterial (round sprites, additive, no depth write)
   const material = new THREE.PointsMaterial({
     size: IS_MOBILE ? 1.6 : 2.2,
     map: discTex,
@@ -198,7 +199,7 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
   const pointsObj = new THREE.Points(geometry, material);
   scene.add(pointsObj);
 
-  // --- Tails buffers (fade white, additive) ---
+  // --- Tails buffers ---
   const tailGeom = new THREE.BufferGeometry();
   const tailPos = new Float32Array(PARTICLE_COUNT * (TAIL_LEN-1) * 6);
   const tailCol = new Float32Array(PARTICLE_COUNT * (TAIL_LEN-1) * 6);
@@ -210,39 +211,71 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
   const tailLines = new THREE.LineSegments(tailGeom, tailMat);
   scene.add(tailLines);
 
-  // --- Morph targets/cycle logic (kept) ---
+  // --- Morph targets/cycle logic ---
   let currentTarget=0, morphT=0, lastSwitch=Date.now();
-  const morphTargets = [textPts,cloudPts, logoPts];
+  // „Front-Facing“-Yaw für Shapes (Text/Logo)
+  let faceYaw = 0;                      // wird bei Shape-Targets gesetzt
+  const morphTargets = [textPts, cloudPts, logoPts];
+
   function setTargetForm(idx) {
+    // Wenn wir auf Text/Logo wechseln, die Form zur Kamera ausrichten:
+    if (idx !== 1) {
+      faceYaw = Math.atan2(camera.position.z, camera.position.x); // Kamera-Azimut
+    }
     for(let i=0;i<PARTICLE_COUNT;i++) particles[i].target = {...morphTargets[idx][i]};
     morphT = 0; lastSwitch = Date.now();
   }
   setTargetForm(0);
 
-  // --- Animate everything ---
+  // --- Animate ---
   const tmpV = new THREE.Vector3();
   function animate() {
     requestAnimationFrame(animate);
-    const time = performance.now() * 0.0012;
+    const now = performance.now();
+    const time = now * 0.0012;
     const elapsed = (Date.now()-lastSwitch)/1000;
     morphT = Math.min(elapsed/MORPH_DURATION, 1);
 
-    // Keep track of 3D bounding box for camera centering (kept)
+    // bounds
     let minX= 1e9, maxX=-1e9, minY= 1e9, maxY=-1e9, minZ= 1e9, maxZ=-1e9;
 
-    const chaosWindow = (morphT > 0.03 && morphT < 0.97) ? Math.sin(Math.PI * (morphT-0.03)/0.94) : 0;
+    // Morph-Fenster
+    const windowEase = (morphT > 0.03 && morphT < 0.97) ? Math.sin(Math.PI * (morphT-0.03)/0.94) : 0;
+    const chaosAmt = CHAOS_AMPL * windowEase;
+    const shakeAmt = SHAKE_AMPL * Math.sin(Math.PI*morphT); // peaked mid-morph
+
+    // sanfter Spin für Shapes (startet bei 0 → kein Backface beim Start)
+    const shapeSpin = (currentTarget !== 1) ? (0.35 * (1 - Math.cos(Math.PI*morphT)) * 0.5) : 0; // ease-in
 
     for(let i=0;i<PARTICLE_COUNT;i++) {
       const c=particles[i].current, t=particles[i].target;
 
-      // softened morph to keep paths traceable
-      const k = 0.08 + morphT*0.12; // start slower, then ease
-      const jitter = CHAOS_AMPL * chaosWindow * Math.sin(time*CHAOS_FREQ + chaosPhase[i]);
+      // Ziel (bei Shapes in Kamera-Richtung yawen + leichten Spin addieren)
+      let tx=t.x, ty=t.y, tz=t.z;
+      if (currentTarget !== 1) {
+        const yaw = -faceYaw + shapeSpin;
+        const co=Math.cos(yaw), si=Math.sin(yaw);
+        const x0=tx, z0=tz;
+        tx = x0*co - z0*si;
+        tz = x0*si + z0*co;
+      }
 
-      c.x += ((t.x-c.x)*k + chaosAxis[i][0]*jitter*0.45);
-      c.y += ((t.y-c.y)*k + chaosAxis[i][1]*jitter*0.45);
-      c.z += ((t.z-c.z)*k + chaosAxis[i][2]*jitter*0.45);
+      // morph-approach (sichtbar, aber ruhig)
+      const k = 0.06 + morphT*0.10;
+      c.x += (tx - c.x)*k;
+      c.y += (ty - c.y)*k;
+      c.z += (tz - c.z)*k;
 
+      // leichtes Chaos + sichtbares Shaking (hochfrequent, aber kleine Amps)
+      const ph = chaosPhase[i];
+      const ax = chaosAxis[i][0], ay=chaosAxis[i][1], az=chaosAxis[i][2];
+      const jitter = chaosAmt * Math.sin(time*CHAOS_FREQ + ph);
+      const shake  = shakeAmt  * 0.015 * Math.sin(time*SHAKE_FREQ + ph*2.0); // 1.5% der Szene
+      c.x += ax*(jitter + shake);
+      c.y += ay*(jitter + shake);
+      c.z += az*(jitter + shake);
+
+      // write
       positions[i*3]=c.x; positions[i*3+1]=c.y; positions[i*3+2]=c.z;
 
       // bounds
@@ -250,14 +283,12 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
       if (c.y < minY) minY = c.y; if (c.y > maxY) maxY = c.y;
       if (c.z < minZ) minZ = c.z; if (c.z > maxZ) maxZ = c.z;
 
-      // trails ring buffer
-      const tr = TAILS[i];
-      tr.push({x:c.x,y:c.y,z:c.z});
-      if(tr.length>TAIL_LEN) tr.shift();
+      // tails
+      const tr = TAILS[i]; tr.push({x:c.x,y:c.y,z:c.z}); if(tr.length>TAIL_LEN) tr.shift();
     }
     geometry.attributes.position.needsUpdate=true;
 
-    // --- DATAVEYES-like tails: white fade head->tail
+    // tails update (weiß → fade)
     let seg=0;
     for(let i=0;i<PARTICLE_COUNT;i++){
       const tr=TAILS[i];
@@ -278,40 +309,31 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
     tailGeom.attributes.position.needsUpdate = true;
     tailGeom.attributes.color.needsUpdate = true;
 
-    // --- Subtle pointer-based color highlight (no camera angle changes) ---
-    // brighten nearby points; also very light twinkle
+    // Pointer-Highlight + Twinkle
     const sigma = 0.12;
     for(let i=0;i<PARTICLE_COUNT;i++){
       const x = positions[i*3], y=positions[i*3+1], z=positions[i*3+2];
-      tmpV.set(x,y,z).project(camera); // NDC
+      tmpV.set(x,y,z).project(camera);
       const dx = tmpV.x - pointerNDC.x, dy = tmpV.y - pointerNDC.y;
       const halo = pointerPulse * Math.exp(-(dx*dx+dy*dy)/(2*sigma*sigma));
       const twinkle = 1 + 0.06*Math.sin(0.22*i + time*0.9);
 
-      let r = baseColors[i*3]  * twinkle;
-      let g = baseColors[i*3+1]* twinkle;
-      let b = baseColors[i*3+2]* twinkle;
-
-      if (halo > 0.0005){
-        const mix = 0.55*halo; // mix with white
-        r = r*(1-mix) + 1*mix;
-        g = g*(1-mix) + 1*mix;
-        b = b*(1-mix) + 1*mix;
-      }
-
+      let r = baseColors[i*3]*twinkle, g=baseColors[i*3+1]*twinkle, b=baseColors[i*3+2]*twinkle;
+      if (halo > 0.0005){ const mix=0.55*halo; r=r*(1-mix)+1*mix; g=g*(1-mix)+1*mix; b=b*(1-mix)+1*mix; }
       colors[i*3]=r; colors[i*3+1]=g; colors[i*3+2]=b;
     }
     pointerPulse *= 0.92;
     geometry.attributes.color.needsUpdate=true;
 
-    // --- Camera: keep your original orbiting logic (unchanged) ---
+    // Kamera (wie gehabt, etwas ruhiger in Y)
     const cx = (minX+maxX)/2, cy = (minY+maxY)/2, cz = (minZ+maxZ)/2;
     const radius = 0.92 * Math.max(maxX-minX, maxY-minY, maxZ-minZ)/2;
     const camR = Math.max(radius + 130, 400)*0.89;
 
-    camera.position.x = Math.cos(time*0.043)*camR + cx;
-    camera.position.z = Math.cos(time*0.083)*camR + cz;
-    camera.position.y = cy + Math.sin(time*0.11)*camR * 0.08; // slightly calmer vertical
+    const timeCam = performance.now()*0.001;
+    camera.position.x = Math.cos(timeCam*0.043)*camR + cx;
+    camera.position.z = Math.cos(timeCam*0.083)*camR + cz;
+    camera.position.y = cy + Math.sin(timeCam*0.11)*camR * 0.06;
     camera.lookAt(cx, cy, cz);
 
     camera.near = 1.2;
@@ -322,7 +344,7 @@ M 150.425 194.166 L 115.69 119.892 L 128.371 119.892 L 155.554 182.86 L 156.843 
   }
   animate();
 
-  // --- Interaction, touch/click + responsive (kept) ---
+  // --- Interaction / responsive (wie gehabt) ---
   window.addEventListener('resize', ()=>{
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
