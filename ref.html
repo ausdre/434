@@ -1,0 +1,1308 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>DV Home Scene — React/R3F + YOUR Animation (center fixed)</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Sora:wght@300..800&family=Outfit:wght@300..800&family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Manrope:wght@300..800&family=Inter+Tight:wght@300..800&family=Work+Sans:wght@300..800&family=Atkinson+Hyperlegible:wght@400;700&family=League+Spartan:wght@400..800&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <style>
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #030519;
+  overflow: hidden
+}
+
+#menuGrad {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 72px;
+  z-index: 2;
+  background: linear-gradient(180deg, #030519 28%, rgba(1, 13, 40, 0) 100%);
+  transition: background 1s
+}
+
+.TitleContainer {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3
+}
+
+.TitleHome {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  text-shadow: 0 0 10px #000;
+  color: #fff;
+  max-width: 45ch;
+  text-align: center;
+  font-size: clamp(24px, 5vw, 55px);
+  line-height: 120%;
+  position: relative
+}
+
+.TitleHome {
+  font-family: "Inter Tight", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+/* Optional shared polish */
+.TitleHome {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "liga", "kern", "ss01";
+}
+
+#infobar .dot {
+  opacity: .6;
+  margin: 0 .35em
+}
+
+#infobar .label {
+  opacity: .75
+}
+
+#infobar .val {
+  opacity: 1
+}
+    </style>
+  </head>
+
+  <body>
+    <div id="menuGrad"></div>
+    <div id="root"></div>
+
+    <script type="importmap">
+      {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+      "three": "https://esm.sh/three@0.158.0",
+      "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.16?deps=react@18.2.0,react-dom@18.2.0,three@0.158.0",
+      "animejs": "https://esm.sh/animejs@3.2.1",
+      "pako": "https://esm.sh/pako@2.1.0",
+      "react-intl": "https://esm.sh/react-intl@6.6.6?deps=react@18.2.0",
+      "@react-spring/web": "https://esm.sh/@react-spring/web@9.7.3?deps=react@18.2.0,react-dom@18.2.0"
+    }
+  }
+</script>
+
+    <script type="module">
+/* === Libs === */
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import * as THREE from 'three';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import anime from 'animejs';
+import { ungzip } from 'pako';
+import { IntlProvider, injectIntl } from 'react-intl';
+import { useTransition, animated } from '@react-spring/web';
+
+/* ================= Core constants / helpers ================= */
+const BASE_W = 2560,
+  BASE_H = 1361;
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+const BACKG = ['#030519', '#120319', '#031419'];
+const gradEl = document.getElementById('menuGrad');
+
+const ratio = () => Math.max(innerWidth / BASE_W, innerHeight / BASE_H);
+const xRatio = () => innerWidth / BASE_W;
+const yRatio = () => innerHeight / BASE_H;
+
+const NODE_PX = 1.2;
+const FOV = 75;
+const CAMERA_FAR = 5e3;
+const CAMERA_NEAR = 0.1;
+
+/* Edge-Breiten-Konfiguration:
+   - Wir speichern die gewünschte Breite in Pixeln in state.edgeWidthPx (siehe Scene).
+   - Umrechnung in Clip-Space (Shader erwartet „width“ in Clip-Koordinaten):
+     1 px ≈ 2/1080 Clip (Y wird im Shader auf 1080 „fixiert“, dadurch viewport-stabil).
+   - EDGE_PX_BASE = „dünn“, EDGE_PX_EMPH = „betont“ (Steps 3 & 6).
+*/
+const edgeClipFromPx = (px) => (px * 2.0) / 1080.0;
+const EDGE_PX_BASE = isMobile ? 14 : 18; // Grunddicke (sichtbar, aber dezent)
+const EDGE_PX_EMPH = isMobile ? 35 : 55; // betont (Steps 3 & 6)
+
+/* Minimal layouts, damit Object.keys(layouts)[…] identisch bleibt */
+const layouts = {
+  circle: { axis1: { step: 10, min: 0, max: 720, values: [0, 360] }, axis2: { step: 10, min: 0, max: 1000, values: [100, 500] }, axis3: { step: 5, min: -600, max: 600, values: [-300, 300] } },
+  grid: { axis1: { step: 10, min: -1000, max: 1000, values: [-500, 500] }, axis2: { step: 10, min: -1000, max: 1000, values: [-300, 300] }, axis3: { step: 5, min: -600, max: 600, values: [-300, 300] } },
+  forceLayout: {},
+  coral: { axis1: { step: 10, min: 0, max: 720, values: [0, 360] }, axis2: { step: 10, min: 0, max: 1000, values: [100, 500] }, axis3: { step: 5, min: -600, max: 600, values: [-300, 300] } }
+};
+
+/* layout -> link family */
+const linksKeyForLayout = l => (l === 'coral' || l === 'WDMTG') ? 'hierarchyRelation' : (l === 'forceLayout') ? 'logicLinks' : 'getLinks';
+
+const MESSAGES = {
+  'home-main-title-1': 'Wir definieren Interaktionen zwischen Mensch und Maschine neu.',
+  'home-main-title-2': 'Wir legen die in großen Datensätzen verborgenen Informationen frei.',
+  'home-main-title-3': 'Wir erschaffen Sprache und Code damit aus Daten wieder Informationen werden.',
+  'home-main-title-4': 'Wir verbessern die Fähigkeit aller, komplexe Daten zu verstehen.',
+  'home-main-title-5': 'Wir transformieren die Art, wie Menschen mit Daten arbeiten und nutzen.',
+  'home-main-title-6': 'Wir extrahieren Daten von Servern und legen sie in die Hände der Anwender – dorthin, wo sie am wertvollsten sind.',
+  'home-main-title-7': 'Wir machen Algorithmen transparent und finden neue Nutzungsmöglichkeiten.',
+  'home-main-title-8': '  '
+};
+
+function setBG(color) {
+  document.body.style.background = color;
+  gradEl.style.background = `linear-gradient(180deg, ${color} 28%, rgba(1,13,40,0) 100%)`;
+}
+
+async function loadGZJSON(url) {
+  const r = await fetch(url);
+  const a = await r.arrayBuffer();
+  return JSON.parse(ungzip(new Uint8Array(a), { to: 'string' }));
+}
+
+function pxToWorld(px, camZ, fovDeg, viewportH) {
+  const f = Math.tan(THREE.MathUtils.degToRad(fovDeg * 0.5)) * 2;
+  return px * camZ * f / viewportH;
+}
+
+function dedupeLinks(list) {
+  const s = new Set(),
+    out = [];
+  for (const { from, to } of list || []) {
+    const a = Math.min(from, to),
+      b = Math.max(from, to),
+      k = `${a}-${b}`;
+    if (!s.has(k)) {
+      s.add(k);
+      out.push({ from: a, to: b });
+    }
+  }
+  return out;
+}
+
+function webglOK() {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl') || c.getContext('experimental-webgl')); } catch { return false; }
+}
+
+/* ================= Title (react-spring crossfade) ================= */
+function TitleBase({ intl, current }) {
+  const [items, setItems] = React.useState([]);
+  React.useEffect(() => {
+    setItems({ text: intl.formatMessage({ id: `home-main-title-${current}` }), key: String(current) });
+  }, [current, intl]);
+  const transitions = useTransition(items, {
+    config: { mass: 1, tension: 140, friction: 40 },
+    trail: 1500,
+    initial: { opacity: 0, position: 'absolute', transform: 'translate3d(100px,-50%,0)' },
+    from: { opacity: 0, position: 'absolute', transform: 'translate3d(100px,-50%,0)' },
+    enter: { opacity: 1, position: 'absolute', transform: 'translate3d(0px,-50%,0)' },
+    leave: { opacity: 0, position: 'absolute', transform: 'translate3d(-100px,-50%,0)' },
+    keys: item => item.key,
+  });
+  return React.createElement('div', { className: 'TitleContainer' },
+    React.createElement('div', { className: 'TitleHome' },
+      React.createElement('div', { key: current },
+        transitions((style, item) => React.createElement(animated.div, { style }, item.text)),
+      )));
+}
+const Title = injectIntl(TitleBase);
+
+/* === NEW: tiny InfoBar overlay === */
+const TOTAL_STEPS = 7;
+
+function InfoBar({ step, layout }) {
+  return React.createElement('div', { id: 'infobar', role: 'status', 'aria-live': 'polite' }, [
+      React.createElement('span', { className: 'label', key: 'a' }, 'Step'),
+      React.createElement('span', { className: 'val', key: 'b' }, ` ${step}`),
+      React.createElement('span', { className: 'dot', key: 'c' }, '•'),
+      React.createElement('span', { className: 'label', key: 'd' }, 'Layout'),
+      React.createElement('span', { className: 'val', key: 'e' }, ` ${layout}`),
+      React.createElement('span', { className: 'dot', key: 'f' }, '•'),
+      React.createElement('span', { className: 'label', key: 'g' }, 'Animation'),
+      React.createElement('span', { className: 'val', key: 'h' }, ` ${Math.min(step, TOTAL_STEPS)} / ${TOTAL_STEPS}`)
+    ]);
+}
+
+/* ================= Shaders ================= */
+const edgeShader = {
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  uniforms: {
+    opacity: { value: 0.0 }, // wird pro Step gesetzt
+    width: { value: edgeClipFromPx(EDGE_PX_EMPH) }, // wird pro Frame aus state.edgeWidthPx gespiegelt
+    resolution: { value: new THREE.Vector2(1920, 1080) }
+  },
+  vertexShader: `
+      precision highp float; uniform vec2 resolution; uniform float width;
+      attribute vec3 instanceFrom,instanceTo;
+      void main(){
+        // Y "fix" auf 1080 -> width verhält sich pixelähnlich über verschiedene Viewports
+        vec2 r=vec2(resolution.x,1080.0);
+        float aspect=r.x/r.y;
+        vec4 s=projectionMatrix*(modelViewMatrix*vec4(instanceFrom,1.0));
+        vec4 e=projectionMatrix*(modelViewMatrix*vec4(instanceTo,1.0));
+        vec2 ns=s.xy/s.w, ne=e.xy/e.w, dir=ne-ns; dir.x*=aspect; dir=normalize(dir);
+        vec2 off=vec2(dir.y,-dir.x); dir.x/=aspect; off.x/=aspect;
+        if(position.x<0.0) off*=-1.0;
+        if(position.y<0.0) off+=-dir; else if(position.y>1.0) off+=dir;
+        off*=width; vec4 clip=(position.y<0.5)?s:e; clip.xy+=off; gl_Position=clip;
+      }`,
+  fragmentShader: `precision highp float; uniform float opacity; void main(){ gl_FragColor=vec4(1.0,1.0,1.0,opacity); }`,
+};
+const nodeShader = {
+  transparent: true,
+  depthTest: true,
+  depthWrite: true,
+  uniforms: { paillette: { value: 0 } },
+  vertexShader: `
+      precision highp float; uniform float paillette;
+      attribute vec3 instancePosition,instanceColor; attribute float instanceScale,instanceOpacity;
+      varying vec3 vColor; varying float vOpacity;
+      void main(){
+        vec4 mv=modelViewMatrix*vec4(instancePosition,1.0);
+        mv.xyz+=position*instanceScale; gl_Position=projectionMatrix*mv;
+        vColor=instanceColor+(vec3(1.0)*(cos(instanceOpacity+paillette)*0.1));
+        vOpacity=(instanceOpacity==1.0)?(0.8+cos(instanceOpacity+paillette)*0.2):instanceOpacity;
+      }`,
+  fragmentShader: `precision highp float; varying vec3 vColor; varying float vOpacity; void main(){ gl_FragColor=vec4(vColor,vOpacity); }`,
+};
+
+/* ================= Load data + global centering ================= */
+/* ---------- robust loader: multi-frame + append single-frame ---------- */
+async function loadFramesAndLinks() {
+  // small helper that returns null on failure (404/network/etc.)
+  async function safeLoadGZJSON(url) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const a = await r.arrayBuffer();
+      return JSON.parse(ungzip(new Uint8Array(a), { to: 'string' }));
+    } catch (_) { 
+      console.warn(_.message, url)
+      return null; 
+    }
+  }
+
+  const frames = [];
+
+  /* 1) Load the original multi-frame capture (if available) */
+  const pts = await safeLoadGZJSON('./points_w_ratio.json.gz');
+  if (Array.isArray(pts) && pts.length) {
+    // (legacy mobile tweak kept exactly as before)
+    if ((innerWidth || innerHeight) <= 600 && pts[5] && pts[5][0]) {
+      const A = Array.isArray(pts[5][0]) ? pts[5][0] : Object.values(pts[5][0]);
+      for (let i = 0; i < A.length; i += 3) { const x = A[i];
+        A[i] = A[i + 1] * 0.6;
+        A[i + 1] = -x * 0.6; }
+      pts[5][0] = A;
+    }
+    for (const d of pts) {
+      const p = new Float32Array(Array.isArray(d[0]) ? d[0] : Object.values(d[0]));
+      const c = new Float32Array(Array.isArray(d[1]) ? d[1] : Object.values(d[1]));
+      // guard: if colors missing/mismatched, fill white
+      const col = (c.length === p.length) ? c : new Float32Array(p.length).fill(1);
+      frames.push([p, col]);
+    }
+  }
+
+  /* 2) Load your single-frame and APPEND it as the last frame (if present) */
+  const single = await safeLoadGZJSON('./vaeora.json.gz');
+  if (single && Array.isArray(single) && single.length === 2 &&
+    Array.isArray(single[0]) && Array.isArray(single[1]) &&
+    single[0].length === single[1].length && (single[0].length % 3 === 0)) {
+    const p = new Float32Array(single[0]);
+    const c = new Float32Array(single[1]);
+    frames.push([p, c]); // <- APPEND to the end
+  }
+
+  if (!frames.length) {
+    throw new Error('No frame data found (points_w_ratio.json.gz or vaeora.json.gz).');
+  }
+
+  /* 3) Global centering across ALL frames (keeps everything aligned) */
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (const [p] of frames) {
+    for (let i = 0; i < p.length; i += 3) {
+      const x = p[i],
+        y = p[i + 1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const cx = (minX + maxX) / 2,
+    cy = (minY + maxY) / 2;
+
+  const centered = frames.map(([p, c]) => {
+    const out = new Float32Array(p.length);
+    for (let i = 0; i < p.length; i += 3) {
+      out[i] = p[i] - cx;
+      out[i + 1] = p[i + 1] - cy;
+      out[i + 2] = p[i + 2] || 0;
+    }
+    return [out, c];
+  });
+  
+  
+  /* ⬇️ swap last two so the previous last is last again, and your new frame is penultimate
+  if (centered.length >= 2) {
+    const n = centered.length;
+    [centered[n - 2], centered[n-1]] = [centered[n-1], centered[n - 2]];
+  }*/
+
+
+
+  /* 4) Links (gracefully handle missing file) */
+  const linksByType = (await safeLoadGZJSON('./links.json.gz')) || {
+    getLinks: [],
+    logicLinks: [],
+    hierarchyRelation: []
+  };
+
+  console.log('Loaded data:', { frames: centered.length, linksByType });
+  return { frames: centered, linksByType };
+}
+/* ================= Inline worker (no-transfer → no detach) ================= */
+const workerCode = `
+    function lerp(a,b,t){ return a + (b-a)*t; }
+    onmessage = (e)=>{
+      let [ nodesFrom, nodesTo, edgesFrom, edgesTo, relations ] = e.data;
+      const factor = 0.05;
+      let i=0, total = (nodesTo.length/3);
+      while(total>i){
+        const v3=i*3; const ff = factor - (i/total)/100.0;
+        nodesFrom[v3]   = lerp(nodesFrom[v3],   nodesTo[v3],   ff);
+        nodesFrom[v3+1] = lerp(nodesFrom[v3+1], nodesTo[v3+1], ff);
+        nodesFrom[v3+2] = lerp(nodesFrom[v3+2], nodesTo[v3+2], ff);
+        i++;
+      }
+      i=0;
+      while(relations.length>i){
+        const v3=i*3, f3=relations[i].from*3, t3=relations[i].to*3;
+        edgesFrom[v3]   = nodesFrom[f3];
+        edgesFrom[v3+1] = nodesFrom[f3+1];
+        edgesFrom[v3+2] = nodesFrom[f3+2];
+        edgesTo[v3]     = nodesFrom[t3];
+        edgesTo[v3+1]   = nodesFrom[t3+1];
+        edgesTo[v3+2]   = nodesFrom[t3+2];
+        i++;
+      }
+      postMessage([nodesFrom, edgesFrom, edgesTo]);
+    };
+  `;
+
+function makeWorker() {
+  try { const blob = new Blob([workerCode], { type: 'text/javascript' }); const url = URL.createObjectURL(blob); return new Worker(url); } catch { return null; }
+}
+
+/* ================= Nodes ================= */
+function NodeCloud({ state }) {
+  const { camera } = useThree();
+  const root = React.useRef();
+  const geo = React.useRef();
+  const mat = React.useRef();
+  const base = React.useMemo(() => new THREE.CircleGeometry(2, 24), []);
+
+  React.useEffect(() => {
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = base.index;
+    g.attributes.position = base.attributes.position;
+    g.attributes.normal = base.attributes.normal || undefined;
+    g.attributes.uv = base.attributes.uv || undefined;
+    geo.current = g;
+    const m = new THREE.ShaderMaterial(nodeShader);
+    mat.current = m;
+    const mesh = new THREE.Mesh(g, m);
+    mesh.frustumCulled = false;
+    root.current.add(mesh);
+    return () => { g.dispose();
+      m.dispose();
+      root.current.remove(mesh); };
+  }, [base]);
+
+  React.useEffect(() => {
+    if (!state.nodesFrom) return;
+    const count = state.nodesFrom.length / 3;
+    const g = geo.current;
+    g.setAttribute('instancePosition', new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3));
+    g.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3));
+    g.setAttribute('instanceScale', new THREE.InstancedBufferAttribute(new Float32Array(count), 1));
+    g.setAttribute('instanceOpacity', new THREE.InstancedBufferAttribute(new Float32Array(count), 1));
+    g.getAttribute('instanceColor').set(state.colFrom);
+    const sWorld = pxToWorld(NODE_PX, state.camZ, camera.fov, state.viewportH);
+    const sca = g.getAttribute('instanceScale'),
+      opa = g.getAttribute('instanceOpacity');
+    for (let i = 0; i < sca.count; i++) { sca.array[i] = sWorld;
+      opa.array[i] = 1.0; }
+    sca.needsUpdate = opa.needsUpdate = true;
+    g.getAttribute('instanceColor').needsUpdate = true;
+  }, [state.nodesFrom]);
+
+  useFrame(() => {
+    if (!geo.current || !mat.current) return;
+    mat.current.uniforms.paillette.value += 0.03;
+
+    if (state.nodesFrom) {
+      const posA = geo.current.getAttribute('instancePosition');
+      if (posA && posA.array.length === state.nodesFrom.length) {
+        posA.array.set(state.nodesFrom);
+        posA.needsUpdate = true;
+      }
+    }
+    if (state.colFrom && state.colTo) {
+      const a = 0.18;
+      for (let i = 0; i < state.colTo.length; i++) state.colFrom[i] += (state.colTo[i] - state.colFrom[i]) * a;
+      const colA = geo.current.getAttribute('instanceColor');
+      if (colA && colA.array.length === state.colFrom.length) {
+        colA.array.set(state.colFrom);
+        colA.needsUpdate = true;
+      }
+    }
+    if (state.needsScaleUpdate) {
+      const sca = geo.current.getAttribute('instanceScale');
+      if (sca) {
+        const sWorld = pxToWorld(NODE_PX, state.camZ, state.fov, state.viewportH);
+        for (let i = 0; i < sca.count; i++) sca.array[i] = sWorld;
+        sca.needsUpdate = true;
+        state.needsScaleUpdate = false;
+      }
+    }
+  });
+
+  return React.createElement('group', { ref: root });
+}
+
+/* ================= Edges ================= */
+function Edges({ state }) {
+  const root = React.useRef();
+  const geo = React.useRef();
+  const mat = React.useRef();
+  const quad = React.useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const a = new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, -1, 1, 0, 1, 0, 0, 1, 1, 0]);
+    g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    return g;
+  }, []);
+
+  React.useEffect(() => {
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = null;
+    g.attributes.position = quad.attributes.position;
+    geo.current = g;
+    const m = new THREE.ShaderMaterial(edgeShader);
+    // Optional: additive Blending lässt Linien „glühen“
+    m.blending = THREE.AdditiveBlending;
+    m.transparent = true;
+    m.depthTest = false;
+    m.depthWrite = false;
+    m.uniforms.width.value = edgeClipFromPx(EDGE_PX_EMPH);
+    mat.current = m;
+    const mesh = new THREE.Mesh(g, m);
+    mesh.frustumCulled = false;
+    root.current.add(mesh);
+    return () => { g.dispose();
+      m.dispose();
+      root.current.remove(mesh); };
+  }, [quad]);
+
+  React.useEffect(() => {
+    if (!state.edgePairs) return;
+    const n = state.edgePairs.length,
+      g = geo.current;
+    g.setAttribute('instanceFrom', new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3));
+    g.setAttribute('instanceTo', new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3));
+    if (mat.current) {
+      mat.current.uniforms.resolution.value.set(state.viewportW, state.viewportH);
+      mat.current.uniforms.opacity.value = state.edgeOpacity;
+      mat.current.uniforms.width.value = edgeClipFromPx(state.edgeWidthPx);
+    }
+  }, [state.edgePairs, state.viewportW, state.viewportH, state.edgeOpacity]);
+
+  useFrame(() => {
+    if (!geo.current || !state.edgesFrom || !state.edgesTo) return;
+    const fromA = geo.current.getAttribute('instanceFrom');
+    const toA = geo.current.getAttribute('instanceTo');
+    if (fromA && toA && fromA.array.length === state.edgesFrom.length && toA.array.length === state.edgesTo.length) {
+      fromA.array.set(state.edgesFrom);
+      toA.array.set(state.edgesTo);
+      fromA.needsUpdate = true;
+      toA.needsUpdate = true;
+    }
+    if (mat.current) {
+      // Live-Spiegelung: Breite & Opacity pro Frame aus state
+      const wantW = edgeClipFromPx(state.edgeWidthPx);
+      if (mat.current.uniforms.width.value !== wantW) mat.current.uniforms.width.value = wantW;
+      if (mat.current.uniforms.opacity.value !== state.edgeOpacity) mat.current.uniforms.opacity.value = state.edgeOpacity;
+    }
+  });
+
+  return React.createElement('group', { ref: root });
+}
+
+/* ================= Camera sync ================= */
+function CameraSync({ state }) {
+  const { camera, gl } = useThree();
+  React.useEffect(() => {
+    camera.fov = state.fov;
+    camera.near = CAMERA_NEAR;
+    camera.far = CAMERA_FAR;
+    camera.updateProjectionMatrix();
+  }, [camera, state.fov]);
+  React.useEffect(() => {
+    gl.setPixelRatio(state.dpr);
+    gl.setSize(state.viewportW, state.viewportH, false);
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.2;
+  }, [gl, state.viewportW, state.viewportH, state.dpr]);
+
+  useFrame(() => {
+    if (!state.cameraPos) state.cameraPos = [0, 0, 0];
+    state.cameraPos[0] = camera.position.x;
+    state.cameraPos[1] = camera.position.y;
+    state.cameraPos[2] = camera.position.z;
+  });
+  return null;
+}
+
+/* ================= Debug HUD ================= */
+function toDeg(rad) { return (rad * 180 / Math.PI); }
+
+function vecToSpherical(x, y, z) {
+  const r = Math.hypot(x, y, z) || 1e-6;
+  const lat = Math.asin(y / r);
+  const lng = Math.atan2(-x, -z);
+  return { lat, lng, r };
+}
+
+function DebugHUD({ state, settings, uiStep }) {
+  const [open, setOpen] = React.useState(new URLSearchParams(location.search).get('debug') === '1');
+  const [snap, setSnap] = React.useState({
+    fps: 0,
+    dpr: 1,
+    vw: innerWidth,
+    vh: innerHeight,
+    step: uiStep,
+    layout: settings?.layout || '',
+    nodes: 0,
+    edges: 0,
+    edgeOpacity: 0,
+    lat: 0,
+    lng: 0,
+    radius: 0,
+    workerTicks: 0,
+    cam: [0, 0, 0]
+  });
+
+  React.useEffect(() => {
+    let last = performance.now(),
+      frames = 0,
+      acc = 0,
+      raf;
+    const loop = (t) => {
+      const dt = t - last;
+      last = t;
+      frames++;
+      acc += dt;
+      if (acc >= 500) { setSnap(s => ({ ...s, fps: Math.round(1000 * (frames / acc)) }));
+        frames = 0;
+        acc = 0; }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  React.useEffect(() => {
+    let raf, last = 0;
+    const tick = (t) => {
+      if (t - last > 33) {
+        const cam = state.cameraPos || [0, 0, 0];
+        const { lat, lng, r } = vecToSpherical(cam[0], cam[1], cam[2]);
+        setSnap(s => ({
+          ...s,
+          dpr: state.dpr,
+          vw: state.viewportW,
+          vh: state.viewportH,
+          step: uiStep,
+          layout: settings?.layout || '',
+          nodes: (state.nodesFrom?.length || 0) / 3 | 0,
+          edges: state.edgePairs?.length || 0,
+          edgeOpacity: +(state.edgeOpacity || 0).toFixed(3),
+          lat: toDeg(lat).toFixed(2),
+          lng: toDeg(lng).toFixed(2),
+          radius: Math.round(r),
+          workerTicks: state.workerTicks | 0,
+          cam: cam.map(v => Math.round(v))
+        }));
+        last = t;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const onKey = (e) => { if (e.key.toLowerCase() === 'd') setOpen(o => !o); };
+    window.addEventListener('keydown', onKey);
+    return () => { cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onKey); };
+  }, [state, settings, uiStep]);
+
+  if (!open) return null;
+  return React.createElement('div', { id: 'debug' }, [
+      React.createElement('h3', { key: 'h' }, 'DEBUG'),
+      React.createElement('div', { key: 'a', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Step'), React.createElement('span', { key: 2 }, String(snap.step))]),
+      React.createElement('div', { key: 'b', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Layout'), React.createElement('span', { key: 2 }, snap.layout)]),
+      React.createElement('div', { key: 'c', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Nodes / Edges'), React.createElement('span', { key: 2 }, `${snap.nodes} / ${snap.edges}`)]),
+      React.createElement('div', { key: 'd', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Edge Opacity'), React.createElement('span', { key: 2 }, String(snap.edgeOpacity))]),
+      React.createElement('div', { key: 'e', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Lat / Lng (°)'), React.createElement('span', { key: 2 }, `${snap.lat} / ${snap.lng}`)]),
+      React.createElement('div', { key: 'f', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Radius (Z)'), React.createElement('span', { key: 2 }, String(snap.radius))]),
+      React.createElement('div', { key: 'g', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'FPS / DPR'), React.createElement('span', { key: 2 }, `${snap.fps} / ${snap.dpr}`)]),
+      React.createElement('div', { key: 'h', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Viewport'), React.createElement('span', { key: 2 }, `${snap.vw} × ${snap.vh}`)]),
+      React.createElement('div', { key: 'i', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Worker Ticks'), React.createElement('span', { key: 2 }, String(snap.workerTicks))]),
+      React.createElement('div', { key: 'j', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Camera XYZ'), React.createElement('span', { key: 2 }, snap.cam.join(', '))]),
+      React.createElement('div', { key: 'k', className: 'muted' }, 'Toggle: press “D” or use ?debug=1')
+    ]);
+}
+
+/* ================= App / Scene ================= */
+function App() {
+  const [data, setData] = React.useState(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        setData(await loadFramesAndLinks());
+      } catch (e) {
+        console.log(e.message);
+        console.error('Failed to load data.');
+      }
+    })();
+  }, []);
+  return data ? React.createElement(Scene, { data }) : null;
+}
+
+function Scene({ data }) {
+  const [dims, setDims] = React.useState({ w: innerWidth, h: innerHeight, dpr: Math.min(devicePixelRatio || 1, 2) });
+  React.useEffect(() => {
+    const onR = () => setDims({ w: innerWidth, h: innerHeight, dpr: Math.min(devicePixelRatio || 1, 2) });
+    addEventListener('resize', onR, { passive: true });
+    return () => removeEventListener('resize', onR);
+  }, []);
+
+  const [uiStep, setUiStep] = React.useState(1);
+  const [bg, setBg] = React.useState(BACKG[0]);
+  React.useEffect(() => setBG(bg), [bg]);
+
+  const [settings, setSettings] = React.useState({
+    layout: Object.keys(layouts)[0],
+    edges: { display: true, opacity: 0.0, width: edgeClipFromPx(EDGE_PX_EMPH) },
+    axises: {},
+  });
+
+  const state = React.useRef({
+    viewportW: dims.w,
+    viewportH: dims.h,
+    dpr: dims.dpr,
+    fov: FOV,
+    camZ: dims.h * 0.5 / ratio(),
+    needsScaleUpdate: true,
+    nodesFrom: null,
+    nodesTo: null,
+    colFrom: null,
+    colTo: null,
+    edgesFrom: null,
+    edgesTo: null,
+    edgePairs: [],
+    edgeOpacity: 0.0,
+    edgeWidthPx: EDGE_PX_EMPH, // <— NEU: gewünschte Edge-Breite in Pixeln
+  }).current;
+
+  const setEdgeOpacity = (o) => { state.edgeOpacity = o; };
+  const setEdgeWidthPx = (px) => { state.edgeWidthPx = px; }; // <— NEU: Setter
+  const setBackground = (c) => setBg(c);
+  const setStep = (s) => setUiStep(s);
+
+  React.useEffect(() => {
+    state.viewportW = dims.w;
+    state.viewportH = dims.h;
+    state.dpr = dims.dpr;
+    state.fov = FOV;
+    state.needsScaleUpdate = true;
+  }, [dims]);
+
+  React.useEffect(() => {
+    const [p0, c0] = data.frames[0];
+    state.nodesFrom = new Float32Array(p0);
+    state.nodesTo = new Float32Array(p0);
+    state.colFrom = new Float32Array(c0);
+    state.colTo = new Float32Array(c0);
+    setLayoutEdges(settings.layout);
+    setBg(BACKG[0]);
+    setUiStep(1);
+    startLerpLoop();
+  }, []);
+
+  React.useEffect(() => { setLayoutEdges(settings.layout); }, [settings.layout]);
+
+  function setLayoutEdges(layoutKey) {
+    const key = linksKeyForLayout(layoutKey);
+    const raw = data.linksByType[key] || [];
+    const pairs = dedupeLinks(raw);
+    state.edgePairs = pairs;
+    state.edgesFrom = new Float32Array(pairs.length * 3);
+    state.edgesTo = new Float32Array(pairs.length * 3);
+  }
+
+  const frameRef = React.useRef(0);
+
+  const bumpFrame = React.useCallback(() => {
+    // advance through the first 8 captured frames like the original
+    frameRef.current = (frameRef.current + 1) % data.frames.length
+    //console.debug('bumpFrame', frameRef.current);
+    const [p, c] = data.frames[frameRef.current];
+    // write into existing typed arrays (no realloc, no detach)
+    state.nodesTo.set(p);
+    state.colTo.set(c);
+  }, [data.frames, state]);
+
+  /* ---- LERP loop (worker or main) ---- */
+  let worker = null;
+
+  function startLerpLoop() {
+    worker = makeWorker();
+    if (worker) {
+      worker.onmessage = (e) => {
+        const [nodesFromArr, edgesFromArr, edgesToArr] = e.data;
+        state.nodesFrom = nodesFromArr;
+        state.edgesFrom = edgesFromArr;
+        state.edgesTo = edgesToArr;
+        state.workerTicks++;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    } else {
+      requestAnimationFrame(tickFallback);
+    }
+  }
+
+  function tick() {
+    worker.postMessage([state.nodesFrom, state.nodesTo, state.edgesFrom, state.edgesTo, state.edgePairs]);
+  }
+
+  function tickFallback() {
+    const factor = 0.05,
+      nf = state.nodesFrom,
+      nt = state.nodesTo;
+    let i = 0,
+      total = nt.length / 3;
+    while (total > i) {
+      const v3 = i * 3,
+        ff = factor - (i / total) / 100;
+      nf[v3] += (nt[v3] - nf[v3]) * ff;
+      nf[v3 + 1] += (nt[v3 + 1] - nf[v3 + 1]) * ff;
+      nf[v3 + 2] += (nt[v3 + 2] - nf[v3 + 2]) * ff;
+      i++;
+    }
+    i = 0;
+    while (state.edgePairs.length > i) {
+      const v3 = i * 3,
+        f3 = state.edgePairs[i].from * 3,
+        t3 = state.edgePairs[i].to * 3;
+      state.edgesFrom[v3] = nf[f3];
+      state.edgesFrom[v3 + 1] = nf[f3 + 1];
+      state.edgesFrom[v3 + 2] = nf[f3 + 2];
+      state.edgesTo[v3] = nf[t3];
+      state.edgesTo[v3 + 1] = nf[t3 + 1];
+      state.edgesTo[v3 + 2] = nf[t3 + 2];
+      i++;
+    }
+    requestAnimationFrame(tickFallback);
+  }
+  React.useEffect(() => () => { if (worker) worker.terminate(); }, []);
+
+  // Expose small helper for DevTools inspection
+  window.__DBG = { state, get step() { return uiStep; }, get settings() { return settings; } };
+
+  return React.createElement(React.Fragment, null, [
+      React.createElement(Canvas, {
+      key: 'canvas',
+      dpr: [1, dims.dpr],
+      camera: { fov: FOV, near: CAMERA_NEAR, far: CAMERA_FAR, position: [0, 0, state.camZ] },
+      onCreated: ({ gl, camera }) => {
+        gl.setPixelRatio(dims.dpr);
+        gl.setSize(dims.w, dims.h, false);
+        gl.outputColorSpace = THREE.SRGBColorSpace;
+        gl.toneMapping = THREE.ACESFilmicToneMapping;
+        gl.toneMappingExposure = 1.2;
+        camera.fov = FOV;
+        camera.near = CAMERA_NEAR;
+        camera.far = CAMERA_FAR;
+        camera.position.set(0, 0, state.camZ);
+        camera.updateProjectionMatrix();
+      },
+      style: { position: 'absolute', inset: 0 },
+    }, [
+        React.createElement(CameraSync, { key: 'cam', state }),
+        React.createElement(NodeCloud, { key: 'nodes', state }),
+        React.createElement(Edges, { key: 'edges', state }),
+        React.createElement(Animation, {
+        key: 'anim',
+        settings,
+        setSettings,
+        setEdgeOpacity,
+        setBackground,
+        setStep,
+        setEdgeWidthPx,
+        bumpFrame // <— NEU: für Anime-Steps
+      }),
+      ]),
+      React.createElement(Title, { key: 'title', current: uiStep }),
+      /* NEW: compact info bar */
+      React.createElement(InfoBar, { key: 'infobar', step: uiStep, layout: settings.layout }),
+      React.createElement(DebugHUD, { key: 'hud', state, settings, uiStep })
+    ]);
+}
+
+/* ==================== YOUR Animation (ausführlich dokumentiert) ====================
+
+   WICHTIGES ANIME.JS-VERHALTEN:
+   - anime({...}) erzeugt einen Tween. Wichtige Optionen:
+     • targets:  Objekt oder Array mit Properties, die interpoliert werden.
+     • duration: Dauer (ms), easing: Kurve, delay: Startverzögerung (ms)
+     • begin():   callback EINMAL beim Start dieses Tweens/Segments
+     • update(a): callback JEDEN Frame; wir lesen a.changeBegan, um "einmalig" Code
+                  am Segmentbeginn auszuführen (wie dein vorhandener Code es macht).
+     • complete(): callback am Ende des Tweens/Segments.
+   - anime.timeline({...}).add({...}) reiht Segmente; jedes .add kann eigene
+     begin/update/complete haben. changeBegin in deinem Code–Stil bleibt beibehalten,
+     wir nutzen innerhalb von update das Flag a.changeBegan zum idempotenten Start.
+
+   KAMERA-STEUERUNG:
+   - Wir animieren __state.cameraLat, .cameraLng, .cameraRadius.
+   - In jedem update() rufen wir deplaceCAmera(), damit die Kamera physisch gesetzt wird.
+   - setBackground / setEdgeOpacity / setEdgeWidthPx / setStep werden in begin bzw.
+     einmalig am Segmentstart gesetzt (siehe Kommentare bei jedem Step).
+
+   EDGES:
+   - Sichtbar NUR in Step 3 und Step 6:
+     setEdgeOpacity(0.5) und setEdgeWidthPx(EDGE_PX_EMPH)
+     ansonsten setEdgeOpacity(0.0), setEdgeWidthPx(EDGE_PX_BASE)
+=====================================================================================*/
+const RAD2DEG = 180 / Math.PI;
+const DEG2RAD = Math.PI / 180;
+
+function moveCamera(lng, lat, radius = window.innerHeight * 0.5) {
+  const phi = Math.PI / 2 - lat; // polar/elevation
+  const theta = lng + Math.PI; // azimuth (Dataset-Ausrichtung)
+  return [-(radius * Math.sin(phi) * Math.sin(theta)),
+           (radius * Math.cos(phi)),
+          -(radius * Math.sin(phi) * Math.cos(theta))]
+}
+
+function Animation({ settings, setSettings, setEdgeOpacity, setBackground, setStep, setEdgeWidthPx, bumpFrame }) {
+  const { camera } = useThree();
+
+  React.useEffect(() => {
+    function deplaceCAmera(lat, lng, radius) {
+      camera.position.set(...moveCamera(lat, lng, radius));
+      camera.lookAt(0, 0, 0);
+    }
+
+    const originalsettigs = { ...settings };
+    const animations = [];
+    let running = true;
+
+    async function run() {
+      let currentSettings = originalsettigs;
+      const width = window.innerWidth,
+        height = window.innerHeight;
+
+      let offset = 0;
+
+      const calcOffset = s => offset = offset + s
+
+      setStep(1)
+      setTimeout(() => {
+        bumpFrame();
+      }, calcOffset(4000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(2)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(3)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(4)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(5)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(6)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(7)
+      }, calcOffset(5000));
+
+      setTimeout(() => {
+        bumpFrame();
+        setStep(8)
+      }, calcOffset(4000));
+      
+
+      const __state = {
+        cameraLat: Math.PI,
+        cameraLng: 0,
+        cameraRadius: height * 0.5,
+        edgeOpacity: 0
+      }
+
+      const activeSteps = { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true };
+
+      /* ------------------------- STEP 1 ---------------------------------
+         Intro: Kamera fährt von Lng=2π auf 0 (sanfter Orbit), zoomt rein.
+         Layout: circle. Edges AUS (Opacity 0), Breite „dünn“.
+         Easing: easeInOutExpo, Dauer 4000ms.
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[1]) {
+        const a = anime({
+          targets: __state,
+          ...{
+            cameraLat: Math.PI * 2,
+            cameraRadius: __state.cameraRadius / ratio()
+          },
+          delay: 0,
+          duration: 4000,
+          easing: 'easeInOutExpo',
+          changeBegin: function () {
+            if (!running) return;
+            currentSettings = {
+              layout: Object.keys(layouts)[0],
+              colorScale: 'users',
+              nodes: { display: true, opacity: 1, width: 1 },
+              axises: {
+                axis1: { value: 'startDay', bounds: { values: [0, 360] } },
+                axis2: { value: 'startTime', bounds: { values: [100, 600] } },
+                axis3: { value: 'collaborationNumber', bounds: { values: [-300, 300] } },
+              },
+            };
+            setBackground(BACKG[0]);
+            setEdgeOpacity(0);
+            setSettings(currentSettings);
+          },
+          update: function (v) {
+            if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius);
+          },
+        }).finished;
+        animations.push(a);
+        await a;
+      }
+
+      /* ------------------------- STEP 2 ---------------------------------
+         Kurzer Achsenwechsel: Fokus auf 'users' in axis3, Kamera-Orbit leicht fortgesetzt.
+         Edges bleiben AUS. Wir nutzen eine Timeline:
+         - .add mit Dummy-Target, um "changeBegin" (einmalig) zu bekommen → setSettings.
+         - Danach längerer Kameraschwenk (10s) mit easing 'easeInOutExpo'.
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[2]) {
+        animations.push(anime.timeline({ easing: 'easeInOutExpo' }).add({
+          targets: { i: 0 },
+          ...{ i: 1 },
+          delay: 2000,
+          duration: 100,
+          changeBegin: function () {
+            if (!running) return;
+            currentSettings = {
+              ...currentSettings,
+              axises: {
+                ...currentSettings.axises,
+                axis3: { value: 'users', bounds: { values: [(-window.innerWidth * 0.3) / ratio(), (window.innerWidth * 0.3) / ratio()] } }
+              }
+            };
+            setSettings(currentSettings);
+          },
+        }));
+        animations.push(anime.timeline({
+          delay: 500,
+          duration: 12000
+        }).add({
+          easing: 'easeInOutExpo',
+          targets: __state,
+          ...{
+            cameraLat: Math.PI * 2.55,
+            cameraRadius: (height * 0.9) / ratio()
+          },
+          duration: 10000,
+          changeBegin: function () { if (!running) return; },
+          update: function (v) { if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+        }));
+      }
+
+      /* ------------------------- STEP 3 ---------------------------------
+         "Connections emerge": Edges EIN (sichtbar) + BREITER.
+         Zwei Segmente:
+         1) Softes Einblenden der Edge-Opacity (0 → 0.5) über 4s (linear).
+            → Im begin() schalten wir auch die Breite hoch (EDGE_PX_EMPH).
+         2) Achsenwechsel auf 'projects' (axis2), 'users' (axis3), Kanten bleiben an.
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[3]) {
+        const a = anime.timeline({ easing: 'easeInOutExpo' }).add({
+          targets: { opacity: 0 },
+          opacity: 0.5,
+          delay: 7000,
+          easing: 'linear',
+          duration: 4000,
+          update: function (v) { if (running && v.changeBegan) setEdgeOpacity(v.animatables[0].target.opacity); },
+        }).add({
+          targets: { i: 0 },
+          ...{ i: 1 },
+          duration: 4000,
+          delay: 6000,
+          changeBegin: function () {
+            if (!running) return;
+            currentSettings = {
+              ...currentSettings,
+              edges: { ...currentSettings.edges, opacity: 0.5, display: true },
+              axises: {
+                ...currentSettings.axises,
+                axis2: { value: 'projects', bounds: { values: [100, 700] } },
+                axis3: { value: 'users', bounds: { values: [(-window.innerWidth * 0.3) / ratio(), (window.innerWidth * 0.3) / ratio()] } },
+              },
+            };
+            setSettings(currentSettings);
+          },
+        }, 10).finished;
+        animations.push(a);
+        await a;
+      }
+
+      /* ------------------------- STEP 4 ---------------------------------
+         Farbwechsel (BACKGROUND 1), Skala 'collaborationNumber', weitere Bounds.
+         Kanten wieder AUS (Opacity 0)
+         Dazu kurzer Kameraschritt.
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[4]) {
+        const a = anime.timeline({ easing: 'easeInOutExpo' }).add({
+          targets: __state,
+          ...{
+            cameraLat: Math.PI * 2
+          },
+          duration: 2000,
+          update: function (v) { if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+        }).add({
+          targets: { i: 0 },
+          ...{ i: 1 },
+          duration: 100,
+          changeBegin: function () {
+            if (!running) return;
+            setBackground(BACKG[1]);
+            currentSettings = {
+              ...currentSettings,
+              colorScale: 'collaborationNumber',
+              edges: { ...currentSettings.edges, opacity: 0.5, display: true },
+              axises: {
+                ...currentSettings.axises,
+                axis2: { value: 'projectTasks', bounds: { values: [100, 500] } },
+                axis3: { value: 'users', bounds: { values: [-1, 1] } },
+              },
+            };
+            setSettings(currentSettings);
+          },
+        }, 200).add({
+          targets: { i: 0 },
+          ...{ i: 1 },
+          duration: 100,
+          changeBegin: function () {
+            if (!running) return;
+            currentSettings = {
+              ...currentSettings,
+              edges: { ...currentSettings.edges, opacity: 0.5, display: true },
+              axises: {
+                ...currentSettings.axises,
+                axis2: { value: 'projectTasks', bounds: { values: [100, 500] } },
+                axis3: { value: 'collaborationNumber', bounds: { values: [-1, 500] } },
+              },
+            };
+            setSettings(currentSettings);
+          },
+        }, 1500).add({
+          easing: 'easeInOutExpo',
+          targets: __state,
+          ...{
+            cameraLng: Math.PI * -0.25,
+            cameraRadius: (window.innerHeight * 0.66) / ratio()
+          },
+          duration: 5000,
+          update: function (v) { if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+        }, 1000).finished;
+        animations.push(a);
+        await a;
+      }
+
+      /* ------------------------- STEP 5 ---------------------------------
+         Übergang ins Grid-Layout, Zoom/FOV-Gefühl, Kanten bleiben AUS.
+         Drei Segmente (kurzer EaseInOut → linearer Drift → Layoutwechsel).
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[5]) {
+        const a = anime.timeline({})
+          .add({
+            targets: __state,
+            ...{
+              cameraLng: 0,
+              cameraRadius: (height * 0.71) / (isMobile ? yRatio() : xRatio())
+            },
+            easing: 'easeInOutExpo',
+            duration: 1000,
+            update: function (v) { if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+          })
+          .add({
+            targets: __state,
+            ...{
+              cameraLat: __state.cameraLat + Math.PI * 0.01,
+              cameraRadius: (height * 0.62) / (isMobile ? yRatio() : xRatio()),
+            },
+            easing: 'linear',
+            duration: 5000,
+            update: function (v) { if (running && v.changeBegan) deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+          }, 1000)
+          .add({
+            targets: { i: 0 },
+            ...{ i: 1 },
+            duration: 6000,
+            changeBegin: function () {
+              if (!running) return;
+              currentSettings = {
+                ...currentSettings,
+                layout: Object.keys(layouts)[1],
+                colorScale: 'projects',
+                edges: { ...currentSettings.edges, display: false },
+                axises: {
+                  axis1: { value: 'startDay', bounds: { values: [-width * 0.48, width * 0.48] } },
+                  axis2: { value: 'projectTasks', bounds: { values: [-height * 0.45, height * 0.45] } },
+                  axis3: { value: 'collaborationNumber', bounds: { values: [-2, 2] } },
+                },
+              };
+              setEdgeOpacity(0);
+              setBackground(BACKG[2]);
+              setSettings(currentSettings);
+            }
+          }, 0).finished;
+        animations.push(a);
+        await a;
+      }
+
+      animations.push(anime({
+        targets: __state,
+        ...{
+          cameraLat: Math.PI * 2.5,
+          cameraRadius: (height * 1.1) / ratio()
+        },
+        easing: 'linear',
+        duration: 18000,
+        delay: 0,
+        complete: () => { if (running){
+          bumpFrame()
+          run(); 
+        }
+        },
+        update: function (v) { if (running && v.changeBegan) {} deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
+      }));
+
+      /* ------------------------- STEP 6 ---------------------------------
+         „Logic binds…“: Layout coral, Edges wieder EIN + BREITER (Betonung).
+         Ein Segment zum Ein-/Umschalten.
+      ------------------------------------------------------------------ */
+      if (activeSteps[6]) {
+        const a = anime.timeline({ easing: 'easeInOutExpo' })
+          .add({
+            targets: { opacity: 0 },
+            opacity: 0.5,
+            duration: 3000,
+            update: function (v) { if (running && v.changeBegan) setEdgeOpacity(v.animatables[0].target.opacity); },
+          })
+          .add({
+            targets: { i: 0 },
+            ...{ i: 1 },
+            delay: 0,
+            duration: 6000,
+            changeBegin: function () {
+              if (!running) return;
+              currentSettings = {
+                ...currentSettings,
+                layout: Object.keys(layouts)[3],
+                edges: { ...currentSettings.edges, display: true, opacity: 0.5 },
+              };
+              setSettings(currentSettings);
+            },
+          }, 200).finished;
+        animations.push(a);
+        await a;
+      }
+
+      /* ------------------------- STEP 7 ---------------------------------
+         Neuordnung (forceLayout), Edges wieder AUS und zurück auf „dünn“.
+      ------------------------------------------------------------------ */
+      if (running && activeSteps[7]) {
+        const a = anime.timeline({
+            easing: 'easeInOutExpo',
+            duration: 8000,
+            delay: 3000
+          })
+          .add({
+            targets: { i: 0 },
+            ...{ i: 1 },
+            delay: 1000,
+            duration: 4000,
+            changeBegin: function () {
+              if (!running) return;
+              setEdgeOpacity(0);
+              currentSettings = { ...currentSettings, layout: Object.keys(layouts)[2] };
+              setSettings(currentSettings);
+            },
+          }, 200).finished;
+        animations.push(a);
+        await a;
+      }
+    }
+
+    run();
+
+    return () => {
+      running = false;
+      animations.forEach((d) => { anime.remove(d); });
+    };
+  }, []);
+
+  return null;
+}
+
+/* ================= Boot ================= */
+if (!webglOK()) { alert('WebGL unavailable. Enable hardware acceleration.'); }
+createRoot(document.getElementById('root')).render(
+  React.createElement(IntlProvider, { locale: 'en', messages: MESSAGES }, React.createElement(App)),
+);
+    </script>
+  </body>
+
+</html>
