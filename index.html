@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -39,13 +40,14 @@ body {
 .TitleHome {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   font-weight: 400;
-  text-shadow: 0 0 10px #000;
-  color: #fff;
-  max-width: 45ch;
-  text-align: center;
-  font-size: clamp(24px, 5vw, 55px);
-  line-height: 120%;
-  position: relative
+    text-shadow: 1px -7px 10px #000;
+    color: #fff;
+    text-align: center;
+    font-size: clamp(95px, 1vw, 2vw);
+    line-height: 120%;
+    position: absolute;
+    min-width: 50vw;
+    margin: auto;
 }
 
 .TitleHome {
@@ -144,12 +146,12 @@ const layouts = {
 const linksKeyForLayout = l => (l === 'coral' || l === 'WDMTG') ? 'hierarchyRelation' : (l === 'forceLayout') ? 'logicLinks' : 'getLinks';
 
 const MESSAGES = {
-  'home-main-title-1': 'Wir definieren Interaktionen zwischen Mensch und Maschine neu.',
+  'home-main-title-1': 'Wir definieren die Interaktionen zwischen Mensch und Maschine neu.',
   'home-main-title-2': 'Wir legen die in großen Datensätzen verborgenen Informationen frei.',
-  'home-main-title-3': 'Wir erschaffen Sprache und Code damit aus Daten wieder Informationen werden.',
+  'home-main-title-3': 'Wir erschaffen Sprache und Code mit der aus Daten, Informationen werden.',
   'home-main-title-4': 'Wir verbessern die Fähigkeit aller, komplexe Daten zu verstehen.',
-  'home-main-title-5': 'Wir transformieren die Art, wie Menschen mit Daten arbeiten und nutzen.',
-  'home-main-title-6': 'Wir extrahieren Daten von Servern und legen sie in die Hände der Anwender – dorthin, wo sie am wertvollsten sind.',
+  'home-main-title-5': 'Wir transformieren die Art, wie Menschen arbeiten.',
+  'home-main-title-6': 'Wir extrahieren Informationen und legen sie in die Hände der Anwender – dorthin, wo sie am wertvollsten sind.',
   'home-main-title-7': 'Wir machen Algorithmen transparent und finden neue Nutzungsmöglichkeiten.',
   'home-main-title-8': '  '
 };
@@ -157,12 +159,6 @@ const MESSAGES = {
 function setBG(color) {
   document.body.style.background = color;
   gradEl.style.background = `linear-gradient(180deg, ${color} 28%, rgba(1,13,40,0) 100%)`;
-}
-
-async function loadGZJSON(url) {
-  const r = await fetch(url);
-  const a = await r.arrayBuffer();
-  return JSON.parse(ungzip(new Uint8Array(a), { to: 'string' }));
 }
 
 function pxToWorld(px, camZ, fovDeg, viewportH) {
@@ -211,22 +207,6 @@ function TitleBase({ intl, current }) {
       )));
 }
 const Title = injectIntl(TitleBase);
-
-/* === NEW: tiny InfoBar overlay === */
-const TOTAL_STEPS = 7;
-
-function InfoBar({ step, layout }) {
-  return React.createElement('div', { id: 'infobar', role: 'status', 'aria-live': 'polite' }, [
-      React.createElement('span', { className: 'label', key: 'a' }, 'Step'),
-      React.createElement('span', { className: 'val', key: 'b' }, ` ${step}`),
-      React.createElement('span', { className: 'dot', key: 'c' }, '•'),
-      React.createElement('span', { className: 'label', key: 'd' }, 'Layout'),
-      React.createElement('span', { className: 'val', key: 'e' }, ` ${layout}`),
-      React.createElement('span', { className: 'dot', key: 'f' }, '•'),
-      React.createElement('span', { className: 'label', key: 'g' }, 'Animation'),
-      React.createElement('span', { className: 'val', key: 'h' }, ` ${Math.min(step, TOTAL_STEPS)} / ${TOTAL_STEPS}`)
-    ]);
-}
 
 /* ================= Shaders ================= */
 const edgeShader = {
@@ -575,104 +555,6 @@ function CameraSync({ state }) {
   return null;
 }
 
-/* ================= Debug HUD ================= */
-function toDeg(rad) { return (rad * 180 / Math.PI); }
-
-function vecToSpherical(x, y, z) {
-  const r = Math.hypot(x, y, z) || 1e-6;
-  const lat = Math.asin(y / r);
-  const lng = Math.atan2(-x, -z);
-  return { lat, lng, r };
-}
-
-function DebugHUD({ state, settings, uiStep }) {
-  const [open, setOpen] = React.useState(new URLSearchParams(location.search).get('debug') === '1');
-  const [snap, setSnap] = React.useState({
-    fps: 0,
-    dpr: 1,
-    vw: innerWidth,
-    vh: innerHeight,
-    step: uiStep,
-    layout: settings?.layout || '',
-    nodes: 0,
-    edges: 0,
-    edgeOpacity: 0,
-    lat: 0,
-    lng: 0,
-    radius: 0,
-    workerTicks: 0,
-    cam: [0, 0, 0]
-  });
-
-  React.useEffect(() => {
-    let last = performance.now(),
-      frames = 0,
-      acc = 0,
-      raf;
-    const loop = (t) => {
-      const dt = t - last;
-      last = t;
-      frames++;
-      acc += dt;
-      if (acc >= 500) { setSnap(s => ({ ...s, fps: Math.round(1000 * (frames / acc)) }));
-        frames = 0;
-        acc = 0; }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  React.useEffect(() => {
-    let raf, last = 0;
-    const tick = (t) => {
-      if (t - last > 33) {
-        const cam = state.cameraPos || [0, 0, 0];
-        const { lat, lng, r } = vecToSpherical(cam[0], cam[1], cam[2]);
-        setSnap(s => ({
-          ...s,
-          dpr: state.dpr,
-          vw: state.viewportW,
-          vh: state.viewportH,
-          step: uiStep,
-          layout: settings?.layout || '',
-          nodes: (state.nodesFrom?.length || 0) / 3 | 0,
-          edges: state.edgePairs?.length || 0,
-          edgeOpacity: +(state.edgeOpacity || 0).toFixed(3),
-          lat: toDeg(lat).toFixed(2),
-          lng: toDeg(lng).toFixed(2),
-          radius: Math.round(r),
-          workerTicks: state.workerTicks | 0,
-          cam: cam.map(v => Math.round(v))
-        }));
-        last = t;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    const onKey = (e) => { if (e.key.toLowerCase() === 'd') setOpen(o => !o); };
-    window.addEventListener('keydown', onKey);
-    return () => { cancelAnimationFrame(raf);
-      window.removeEventListener('keydown', onKey); };
-  }, [state, settings, uiStep]);
-
-  if (!open) return null;
-  return React.createElement('div', { id: 'debug' }, [
-      React.createElement('h3', { key: 'h' }, 'DEBUG'),
-      React.createElement('div', { key: 'a', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Step'), React.createElement('span', { key: 2 }, String(snap.step))]),
-      React.createElement('div', { key: 'b', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Layout'), React.createElement('span', { key: 2 }, snap.layout)]),
-      React.createElement('div', { key: 'c', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Nodes / Edges'), React.createElement('span', { key: 2 }, `${snap.nodes} / ${snap.edges}`)]),
-      React.createElement('div', { key: 'd', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Edge Opacity'), React.createElement('span', { key: 2 }, String(snap.edgeOpacity))]),
-      React.createElement('div', { key: 'e', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Lat / Lng (°)'), React.createElement('span', { key: 2 }, `${snap.lat} / ${snap.lng}`)]),
-      React.createElement('div', { key: 'f', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Radius (Z)'), React.createElement('span', { key: 2 }, String(snap.radius))]),
-      React.createElement('div', { key: 'g', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'FPS / DPR'), React.createElement('span', { key: 2 }, `${snap.fps} / ${snap.dpr}`)]),
-      React.createElement('div', { key: 'h', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Viewport'), React.createElement('span', { key: 2 }, `${snap.vw} × ${snap.vh}`)]),
-      React.createElement('div', { key: 'i', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Worker Ticks'), React.createElement('span', { key: 2 }, String(snap.workerTicks))]),
-      React.createElement('div', { key: 'j', className: 'row' }, [React.createElement('span', { className: 'muted', key: 1 }, 'Camera XYZ'), React.createElement('span', { key: 2 }, snap.cam.join(', '))]),
-      React.createElement('div', { key: 'k', className: 'muted' }, 'Toggle: press “D” or use ?debug=1')
-    ]);
-}
-
 /* ================= App / Scene ================= */
 function App() {
   const [data, setData] = React.useState(null);
@@ -722,7 +604,7 @@ function Scene({ data }) {
     edgesTo: null,
     edgePairs: [],
     edgeOpacity: 0.0,
-    edgeWidthPx: EDGE_PX_EMPH, // <— NEU: gewünschte Edge-Breite in Pixeln
+    edgeWidthPx: EDGE_PX_EMPH,
   }).current;
 
   const setEdgeOpacity = (o) => { state.edgeOpacity = o; };
@@ -764,11 +646,8 @@ function Scene({ data }) {
   const frameRef = React.useRef(0);
 
   const bumpFrame = React.useCallback(() => {
-    // advance through the first 8 captured frames like the original
     frameRef.current = (frameRef.current + 1) % data.frames.length
-    //console.debug('bumpFrame', frameRef.current);
     const [p, c] = data.frames[frameRef.current];
-    // write into existing typed arrays (no realloc, no detach)
     state.nodesTo.set(p);
     state.colTo.set(c);
   }, [data.frames, state]);
@@ -828,9 +707,6 @@ function Scene({ data }) {
   }
   React.useEffect(() => () => { if (worker) worker.terminate(); }, []);
 
-  // Expose small helper for DevTools inspection
-  window.__DBG = { state, get step() { return uiStep; }, get settings() { return settings; } };
-
   return React.createElement(React.Fragment, null, [
       React.createElement(Canvas, {
       key: 'canvas',
@@ -865,37 +741,9 @@ function Scene({ data }) {
       }),
       ]),
       React.createElement(Title, { key: 'title', current: uiStep }),
-      /* NEW: compact info bar */
-      React.createElement(InfoBar, { key: 'infobar', step: uiStep, layout: settings.layout }),
-      React.createElement(DebugHUD, { key: 'hud', state, settings, uiStep })
     ]);
 }
 
-/* ==================== YOUR Animation (ausführlich dokumentiert) ====================
-
-   WICHTIGES ANIME.JS-VERHALTEN:
-   - anime({...}) erzeugt einen Tween. Wichtige Optionen:
-     • targets:  Objekt oder Array mit Properties, die interpoliert werden.
-     • duration: Dauer (ms), easing: Kurve, delay: Startverzögerung (ms)
-     • begin():   callback EINMAL beim Start dieses Tweens/Segments
-     • update(a): callback JEDEN Frame; wir lesen a.changeBegan, um "einmalig" Code
-                  am Segmentbeginn auszuführen (wie dein vorhandener Code es macht).
-     • complete(): callback am Ende des Tweens/Segments.
-   - anime.timeline({...}).add({...}) reiht Segmente; jedes .add kann eigene
-     begin/update/complete haben. changeBegin in deinem Code–Stil bleibt beibehalten,
-     wir nutzen innerhalb von update das Flag a.changeBegan zum idempotenten Start.
-
-   KAMERA-STEUERUNG:
-   - Wir animieren __state.cameraLat, .cameraLng, .cameraRadius.
-   - In jedem update() rufen wir deplaceCAmera(), damit die Kamera physisch gesetzt wird.
-   - setBackground / setEdgeOpacity / setEdgeWidthPx / setStep werden in begin bzw.
-     einmalig am Segmentstart gesetzt (siehe Kommentare bei jedem Step).
-
-   EDGES:
-   - Sichtbar NUR in Step 3 und Step 6:
-     setEdgeOpacity(0.5) und setEdgeWidthPx(EDGE_PX_EMPH)
-     ansonsten setEdgeOpacity(0.0), setEdgeWidthPx(EDGE_PX_BASE)
-=====================================================================================*/
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
@@ -980,8 +828,6 @@ function Animation({ settings, setSettings, setEdgeOpacity, setBackground, setSt
       const activeSteps = { 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true };
 
       /* ------------------------- STEP 1 ---------------------------------
-         Intro: Kamera fährt von Lng=2π auf 0 (sanfter Orbit), zoomt rein.
-         Layout: circle. Edges AUS (Opacity 0), Breite „dünn“.
          Easing: easeInOutExpo, Dauer 4000ms.
       ------------------------------------------------------------------ */
       if (running && activeSteps[1]) {
@@ -1019,8 +865,6 @@ function Animation({ settings, setSettings, setEdgeOpacity, setBackground, setSt
       }
 
       /* ------------------------- STEP 2 ---------------------------------
-         Kurzer Achsenwechsel: Fokus auf 'users' in axis3, Kamera-Orbit leicht fortgesetzt.
-         Edges bleiben AUS. Wir nutzen eine Timeline:
          - .add mit Dummy-Target, um "changeBegin" (einmalig) zu bekommen → setSettings.
          - Danach längerer Kameraschwenk (10s) mit easing 'easeInOutExpo'.
       ------------------------------------------------------------------ */
@@ -1195,14 +1039,13 @@ function Animation({ settings, setSettings, setEdgeOpacity, setBackground, setSt
                 ...currentSettings,
                 layout: Object.keys(layouts)[1],
                 colorScale: 'projects',
-                edges: { ...currentSettings.edges, display: false },
+                edges: { ...currentSettings.edges, display: true },
                 axises: {
                   axis1: { value: 'startDay', bounds: { values: [-width * 0.48, width * 0.48] } },
                   axis2: { value: 'projectTasks', bounds: { values: [-height * 0.45, height * 0.45] } },
                   axis3: { value: 'collaborationNumber', bounds: { values: [-2, 2] } },
                 },
               };
-              setEdgeOpacity(0);
               setBackground(BACKG[2]);
               setSettings(currentSettings);
             }
@@ -1220,13 +1063,19 @@ function Animation({ settings, setSettings, setEdgeOpacity, setBackground, setSt
         easing: 'linear',
         duration: 18000,
         delay: 0,
-        complete: () => { if (running){
-          bumpFrame()
-          run(); 
-        }
+        complete: () => {
+          if (running){
+            bumpFrame()
+            run();
+          }
         },
-        update: function (v) { if (running && v.changeBegan) {} deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius); },
-      }));
+        update: function (v) {
+          if (running && v.changeBegan) {
+          setEdgeOpacity(0);
+          deplaceCAmera(__state.cameraLat, __state.cameraLng, __state.cameraRadius);
+          }
+        },
+      }) );
 
       /* ------------------------- STEP 6 ---------------------------------
          „Logic binds…“: Layout coral, Edges wieder EIN + BREITER (Betonung).
